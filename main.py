@@ -94,7 +94,7 @@ class MY_GUI:
         self.zn_ch_week_mapping = {
             "Mon": "周一",
             "Tue": "周二",
-            "Web": "周三",
+            "Wed": "周三",
             "Thu": "周四",
             "Fri": "周五",
             "Sat": "周六",
@@ -152,58 +152,26 @@ class MY_GUI:
             
             # 将所有创建的框体存储进入列表，以便于之后进行操作，特殊的，列表最后一位是学生对应的 id
             self.student_list.append([student_frame, student_label, student_combobox, student_name_list[i][0]])
-        
-    def submit_attendance(self):
-        """将签到信息提交到服务器上，如果有学生没有写任何签到信息，则特殊提示，暂时支持出勤和未出勤两种，暂不支持备注"""
+    
+    def get_class_date(self, info):
+        current_time, current_week = time.strftime("%Y/%m/%d-%a").split('-')
+        # print(current_time)
+        current_time = list(map(int, current_time.split('/')))
+        arithmetic_mapping = {
+        "周一": 0,
+        "周二": 1,
+        "周三": 2,
+        "周四": 3,
+        "周五": 4,
+        "周六": 5,
+        "周日": 6
+        }
+        anti_arithmetic_mapping = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+        current_week = arithmetic_mapping[self.zn_ch_week_mapping[current_week]]
         for i in self.student_list:
-            if not i[2].get():
-                if askyesno("警告", "存在未填写出勤信息的学生，是否继续？"):
-                    break
-                else:
-                    return 0
-
-        sql = "insert into attendance (class_id, student_id, attendance_date, status) values "
-        # current_time = time.strftime("%Y年%m月%d日-%a")
-        # arithmetic_mapping = {
-        #     "周一": 0,
-        #     "周二": 1,
-        #     "周三": 2,
-        #     "周四": 3,
-        #     "周五": 4,
-        #     "周六": 5,
-        #     "周日": 6
-        #     }
-        # anti_arithmetic_mapping = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-        # target_date = arithmetic_mapping[self.week_combobox.get().split[0]]
-        # current_date = arithmetic_mapping[current_time.split('-')[-1]]
-        # for i in range(7):
-        #     if current_date%7!=target_date:
-        #         temp += 1
-        #     else:
-        #         break
-        # curr
-
-
-        for i in self.student_list:
-            info = submit_sql(f"select student.class_id, student.student_id from student, class where student.class_id=class.class_id and student.student_id={i[3]} and class.class_name='{self.week_combobox.get()}'")[0]
-            current_time, current_week = time.strftime("%Y/%m/%d-%a").split('-')
-            print(current_time)
-            current_time = list(map(int, current_time.split('/')))
-            arithmetic_mapping = {
-            "周一": 0,
-            "周二": 1,
-            "周三": 2,
-            "周四": 3,
-            "周五": 4,
-            "周六": 5,
-            "周日": 6
-            }
-            anti_arithmetic_mapping = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-            current_week = arithmetic_mapping[self.zn_ch_week_mapping[current_week]]
             # 避免签到的时候并不是在上课的时候，而是在上课之后
             for j in range(7):
                 current_week = current_week if current_week-j>=0 else current_week+7
-                print(arithmetic_mapping[self.week_combobox.get().split()[0]], current_week-j)
                 if current_week-j == arithmetic_mapping[self.week_combobox.get().split()[0]]:
                     # 日借位
                     if current_time[2]-j <= 0:
@@ -227,18 +195,40 @@ class MY_GUI:
                     else:
                         current_time[2] -= j
                     
-                    current_time = f"{current_time[0]}年{current_time[1]}月{current_time[2]}日"
+                    current_time = f"{current_time[0]}年{current_time[1]:0>2}月{current_time[2]:0>2}日"
 
-                    sql += f"({info[0]}, {info[1]}, '{current_time}', '{i[2].get()}'), "
-        
-        sql = sql[:-2] + ';'
-        print(sql)
+                    yield f"({info[0]}, {info[1]}, '{current_time}', '{i[2].get()}')"
+    
+    def submit_attendance(self):
+        """将签到信息提交到服务器上，如果有学生没有写任何签到信息，则特殊提示，暂时支持出勤和未出勤两种，暂不支持备注"""
+        for i in self.student_list:
+            if not i[2].get():
+                if askyesno("警告", "存在未填写出勤信息的学生，是否继续？"):
+                    break
+                else:
+                    return 0
+
+        info = submit_sql(f"select student.class_id, student.student_id from student, class where student.class_id=class.class_id and student.student_id={i[3]} and class.class_name='{self.week_combobox.get()}'")[0]
+        sql = "insert into attendance (class_id, student_id, attendance_date, status) values " + ", ".join(i for i in self.get_class_date(info)) + ';'
+
         r = submit_sql(sql, mode='post')
 
         if r==1:
             showinfo("成功", "提交成功！")
         else:
             showinfo("失败", f"提交失败，错误码为：{r}")
+
+class popup(Toplevel):
+    def __init__(self, parent=MY_GUI):
+        super().__init__()
+        self.window_name = self
+        self.parent = parent
+    
+    def init(self):
+        self.window_name.title("签到时间")
+        self.window_name.geometry('600x400+200+200')
+        
+        self.tips_label = Label(self.window_name, text="确认签到日期：")
 
 def gui_start():
     init_window = Tk()
